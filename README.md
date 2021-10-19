@@ -1,74 +1,109 @@
-# Sample API project
-
-Simple application which has a single "/version" endpoint build with Node.js/Express
-[Nest](https://github.com/nestjs/nest) framework.
-
-Fully containerize using Docker file & Docker compose as a single deployable artifact, encapsulating all dependencies.
-
-CI/CD pipeline build using GitHub Actions
-
-<p align="center">
-  <img src="public/cicd.png" width="620" alt="Nest Logo" />
-</p>
-
-\*\*Note: All grey boxes are out of scope of this application, such as Slack notificaiton, staging env and production hosting
-
-## 1. Getting started
-
-### 1.1 Requirements
+# Deploy and scale assignment app with minikube kubernetes
 
 Before starting, make sure you have at least those components on your workstation:
 
-- A [NodeJS](https://nodejs.org/) and NPM
-- A [Docker](https://www.docker.com/) and `docker-compose`.
+- minikube https://minikube.sigs.k8s.io/docs/start/
+- kubectl https://minikube.sigs.k8s.io/docs/handbook/kubectl/
 
-### 1.1 Running the app
+## Objective
+
+- Deploy previously build assignment docker container image https://hub.docker.com/r/vijayshiyani/assignment to minikube
+- run and access the app
+- scale up and down deployment
+- view application logs
+- shell access running pods
+- clean up
+
+## Verify minikube status
 
 ```bash
+$ minikube status
+minikube
+type: Control Plane
+host: Running
+kubelet: Running
+apiserver: Running
+kubeconfig: Configured
+```
 
-# Start by cloning this project on your workstation.
-$ git clone https://github.com/vijayshiyani/sample-containerise-app.git
+## Deploy
 
-$ cd sample-containerise-app/
+```bash
+# check existing dployments pods and services
+$ kubectl get deployments,pods,svc
+NAME                 TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE
+service/kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   153m
 
-# development mode
-$ docker-compose up dev
+# create deployment using assignment-app-deploy.yaml
+$ kubectl create -f assignment-app-deploy.yaml
 
-# OR
+# create service using assignment-app-service.yaml
+$ kubectl create -f assignment-app-service.yaml
 
-# production mode
-$ docker-compose up prod
+# verify deployment
+$ kubectl get deployments,pods,svc
+NAME                                    READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/assignment-app-deploy   1/1     1            1           2m29s
 
+NAME                                       READY   STATUS    RESTARTS   AGE
+pod/assignment-app-deploy-64455c7d-bsj42   1/1     Running   0          2m29s
 
-# running test
-$ npm run test
+NAME                         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE
+service/assignment-service   NodePort    10.110.69.215   <none>        80:30005/TCP   86s
+service/kubernetes           ClusterIP   10.96.0.1       <none>        443/TCP        158m
 
 ```
 
-Navigate to [http://localhost:3000/](http://localhost:3000/) and try out `/version` endpoint http://localhost:3000/#/General/AppController_getVersion
-
-### 1.2 Downloading released production ready versions from Docker hub container registery
+## Access app & app logs
 
 ```bash
 
-# Docker Pull Command to get latest release
-$ docker pull vijayshiyani/assignment
+# get url
+$ minikube service assignment-service --url
+🏃  Starting tunnel for service assignment-service.
+|-----------|--------------------|-------------|------------------------|
+| NAMESPACE |        NAME        | TARGET PORT |          URL           |
+|-----------|--------------------|-------------|------------------------|
+| default   | assignment-service |             | http://127.0.0.1:61334 |
+|-----------|--------------------|-------------|------------------------|
+http://127.0.0.1:61334
 
-# locally running latest release
-$ docker run -p 3000:3000 vijayshiyani/assignment
+
+# get pod name and dump  pod logs (stdout)
+$ kubectl get deployments,pods,svc
+$ kubectl logs assignment-app-deploy-64455c7d-bsj42
 
 ```
 
-## 2. Approach
+## scale up and down deployment
 
-- There is only one git branch `main`
-- Every pull request or commit to `main` branch triggers Git Actions Node.js CI. It builds the project with node.js 14.X and runs tests
-- pull request Merge wont be allowed until all test passes
-- To create a new release, a developer must tag commit with with 'vx.x.x'
-- Any commit tagged with the above pattern triggers dockerhub_registery Git Actions. It builds new image records the last git commit hash and pushes the latest production-ready image to Docker Hub Container Registry. https://hub.docker.com/r/vijayshiyani/assignment
+```bash
 
-## 3. Risk associated with application/deployment
+# scale up 3 replicas
+$ kubectl scale deployment assignment-app-deploy --replicas=3
+NAME                                       READY   STATUS    RESTARTS   AGE
+pod/assignment-app-deploy-64455c7d-bsj42   1/1     Running   0          15m
+pod/assignment-app-deploy-64455c7d-d6fr6   1/1     Running   0          49s
+pod/assignment-app-deploy-64455c7d-wzw7m   1/1     Running   0          49s
 
-- Currently, application tests are run using `ubuntu-latest`, however final applicaiton containers are build using `node:14-alpine` skiny docker image. This can be easily improved by running test inside container.
-- Git Actions CI is not as flexible and scalable as Hosted CI such as Jenkins. So complex pipeline will be tricky to create and manage on Git Actions.
-- We must keep track on final docker production image size and vulnerabilities introduced by dependicies.
+$ kubectl scale deployment assignment-app-deploy --replicas=1
+$ kubectl get deployments,pods,svc
+NAME                                       READY   STATUS    RESTARTS   AGE
+pod/assignment-app-deploy-64455c7d-bsj42   1/1     Running   0          17m
+
+```
+
+## shell access running pods
+
+```bash
+# Interactive shell access to a running pod
+kubectl exec --stdin --tty assignment-app-deploy-64455c7d-bsj42  -- /bin/sh
+```
+
+## clean up
+
+```bash
+$ kubectl delete service assignment-service
+$ kubectl delete deployment assignment-app-deploy
+$ minikube stop
+```
