@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: assignment-service
+  namespace: technical-test
   labels:
     name: assignment-app-service
     app: demo-assignment-app
